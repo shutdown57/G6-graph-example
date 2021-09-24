@@ -1,8 +1,5 @@
-body {
-  padding: 50px;
-  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
-}
-
-a {
-  color: #00B7FF;
+#diagram {
+  width: 100%;
+  height: 40rem;
+  background-color: darkgray;
 }

@@ -1,11 +1,153 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title><%= title %></title>
-    <link rel='stylesheet' href='/stylesheets/style.css' />
-  </head>
-  <body>
-    <h1><%= title %></h1>
-    <p>Welcome to <%= title %></p>
-  </body>
-</html>
+<% layout('/layout') -%>
+
+<div class="container">
+  <div class="row">
+    <div class="col-12">
+      <h1>G6 experiment</h1>
+      <h3 id="info"></h3>
+    </div>
+    <div class="col-12">
+      <div id="diagram"></div>
+    </div>
+  </div>
+  <br>
+</div>
+
+<script src="/javascripts/bootstrap.bundle.js"></script>
+<script src="/javascripts/g6.min.js"></script>
+<script>
+  async function getData(id, nodes = null, edges = null) {
+    try {
+      const resp = await fetch(`/cis?id=${id}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      if (nodes) {
+        return await parseData(await resp.json(), nodes, edges)
+      }
+      return await parseData(await resp.json())
+    } catch (err) {
+      console.error(err.name)
+    }
+    return []
+  }
+
+  async function parseData(mainData, nodes = null, edges = null) {
+    if (!mainData) {
+      return []
+    }
+    const data = {
+      nodes: new Array,
+      edges: new Array
+    }
+
+    data.nodes.push({ id: `${ mainData.id }`, label: `${ mainData.name }` })
+
+    if (mainData.to_relationships) {
+      data.nodes.push(...mainData.to_relationships.map(v => {
+        return {
+          id: `${ v.id }`,
+          label: v.name
+        }
+      }))
+
+      data.edges.push(...mainData.to_relationships.map(v => {
+        return {
+          source: `${ mainData.id }`,
+          target: `${ v.id }`,
+          label: `${ v.name }`
+        }
+      }))
+    }
+
+    if (mainData.from_relationships) {
+      data.nodes.push(...mainData.from_relationships.map(v => {
+        return {
+          id: `${ v.id }`,
+          label: v.name
+        }
+      }))
+
+      data.edges.push(...mainData.from_relationships.map(v => {
+        return {
+          source: `${ v.id }`,
+          target: `${ mainData.id }`
+        }
+      }))
+    }
+
+    // Fix duplicated data
+    if (nodes) {
+      let temp = []
+      for (let node of data.nodes) {
+        if (!nodes.some(n => n.get('id') === node.id)) {
+          temp.push(node)
+        }
+      }
+      data.nodes = temp
+    }
+
+    return await data
+  }
+
+  window.addEventListener('load', async () => {
+    const width = document.getElementById('diagram').scrollWidth
+    const height = document.getElementById('diagram').scrollHeight || 500
+    const graph = await new G6.Graph({
+      container: 'diagram',
+      width,
+      height,
+      /* translate the graph to align the canvas's center, support by v3.5.1 */
+      fitCenter: true,
+      modes: {
+        /* behavior */
+        default: ['drag-node', 'drag-canvas'],
+      },
+      defaultEdge: {
+        /* configure the bending radius and min distance to the end nodes */
+        style: {
+          endArrow: true,
+        },
+        labelCfg: {
+          autoRotate: true
+        }
+      },
+      layout: {
+        type: 'fruchterman',
+        gravity: 5,
+        speed: 5,
+        // for rendering after each iteration
+        tick: () => {
+          graph.refreshPositions()
+        },
+        linkDistance: 50,
+      },
+    })
+
+    graph.on('node:click', async (e) => {
+      const { item } = e
+      const node = item.getModel()
+      const nodes = await graph.getNodes()
+      const d = await getData(item.get('id'), nodes)
+
+      if (d.nodes) {
+        // Add new nodes to graph
+        for (let n of d.nodes) {
+          graph.addItem('node', n)
+        }
+        // Add new edges to graph
+        for (let e of d.edges) {
+          graph.addItem('edge', e)
+        }
+
+        // Relayout the graph
+        graph.layout()
+      }
+    })
+
+    const data = await getData(1)
+    await graph.data(data)
+    await graph.render()
+  })
+</script>
